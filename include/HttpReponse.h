@@ -57,14 +57,13 @@ public:
 
     static std::unordered_map <std::string, MimeType> MimeMap;
 
-//private:
-    bool isalive_;
-    HTTP_VERSION version_;
-    HTTP_STATUS status_code_;
-    MimeType mimeType_;
+    bool isalive_;//根据request中根据connect来确定的
+    HTTP_VERSION version_; //版本号是根据request中的版本号确定的
+    HTTP_STATUS status_code_; //取决于查找请求资源的结果
+    MimeType mimeType_; //通过解析资源类型确定
     std::string status_msg_;
     std::string body_;
-    std::string filepath_;
+    std::string filepath_; //也是根据请求资源的解析结果来确定的
     std::unordered_map <std::string, std::string> headers_;
 };
 

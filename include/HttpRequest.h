@@ -6,7 +6,8 @@
 #include <iostream>
 #include <unordered_map>
 
-
+//这个类纯粹就是一个用来表示数据的,需要根据传输过来的字符串进行构造生成一个HttpRequest
+//Parse会将缓冲区的字符串抽象成一个HttpRequest
 class HttpRequest {
 public:
 
@@ -25,6 +26,7 @@ public:
             return static_cast<std::size_t> (t);//hash值是将此转型为整型.
         }
     };
+    //定义一个仿函数使用时EnumClassHash(obj) == size_t(pbj)
 
     static std::unordered_map<std::string,HTTP_HEADER> header_map;
     //由字符串得出枚举
@@ -32,9 +34,9 @@ public:
 //private:
     HTTP_METHOD method_;
     HTTP_VERSION version_;
-    std::string url_;
+    std::string url_; //这个地方应该是url
     //根据枚举的kv map
-    std::unordered_map<HTTP_HEADER,std::string,EnumClassHash> headers_;
+    std::unordered_map<HTTP_HEADER,std::string,EnumClassHash> headers_; //这个仿函数的作用是什么？？
     std::string body_;
 
 };

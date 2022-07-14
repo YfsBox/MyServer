@@ -14,7 +14,7 @@ static size_t getnow() {
 
 
 TimerNode::TimerNode(std::shared_ptr <Httpdata> sdata, const size_t timeout) :
-        isDeleted_(false), data_(data_) {
+        isDeleted_(false), data_(sdata) {
 
     expired_ = getnow() + timeout;
 }

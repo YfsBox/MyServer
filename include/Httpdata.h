@@ -8,6 +8,7 @@
 #include "Socket.h"
 #include "Timer.h"
 
+//代表一个已经与server建立的连接
 class TimerNode;
 
 class Httpdata {//这个数据结构究竟都是怎么用的
