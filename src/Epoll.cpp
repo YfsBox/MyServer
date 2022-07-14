@@ -7,7 +7,7 @@
 __uint32_t Epoll::DEFALUT_EVENT = (EPOLLIN | EPOLLET | EPOLLONESHOT);
 int Epoll::MAX_EVENT_SIZE = 10000;
 TimerManager Epoll::timermanager;
-
+//主要在于分配数组和创建fd
 Epoll::Epoll(ServerSocket &server, const int max_event_size) :
         epoll_fd_(-1), listen_fd_(-1), max_event_size_(max_event_size), events_(nullptr) {
     int listen_fd = server.getListenfd();
@@ -38,7 +38,7 @@ Epoll::~Epoll() {
         delete[]events_;
     }
 }
-
+//这几个函数主要是对与epoll_ctl的封装
 int Epoll::addfd(const int fd, const uint32_t events, std::shared_ptr <Httpdata> data) {
     epoll_event event;
     //event.events = events;
@@ -89,15 +89,15 @@ int Epoll::delfd(const int fd, const uint32_t events, std::shared_ptr <Httpdata>
     }
     return 0;
 }
-
+//处理listen_fd可以看作是对于accept的封装
 int Epoll::handleConnection(ServerSocket &server) {
     std::cout<<"Begin cope with connection\n";
     std::shared_ptr <ClientSocket> client(new ClientSocket);
     //是不是这里的accept是有阻塞问题的???
-    while (server.accept(*client) > 0) {
+    while (server.accept(*client) > 0) {//无论是client还是listen_fd的处理都应该是非阻塞的
         //std::cout<<"The loop in Epoll::handleConnection....\n";
         //如果接受成功
-
+        //在下面的处理中,就是构造一个client_socket结构体并且还有data加入到map中还有addfd
         int client_fd = client->getfd();
         int nb_ret = setnonblock(client_fd);
         if (nb_ret < 0) {
@@ -133,7 +133,8 @@ int Epoll::handleConnection(ServerSocket &server) {
     //std::cout<<"handle connection finish\n";
     return 0;
 }
-
+//可以看作是对epoll_wait的封装,调用一次epoll_wait,并且对其结果进行处理
+//最终返回的是结果,也就是就绪事件对应的httpdata项
 std::vector <std::shared_ptr<Httpdata>> Epoll::epoll(ServerSocket &server, const int timeout) { //默认情况下是-1,也就是无限制地阻塞的
     std::vector <std::shared_ptr<Httpdata>> result;
     int ret = epoll_wait(epoll_fd_, events_, max_event_size_, timeout);
@@ -149,7 +150,6 @@ std::vector <std::shared_ptr<Httpdata>> Epoll::epoll(ServerSocket &server, const
     for (int i = 0; i < event_cnt; i++) {
         int tmp_fd = events_[i].data.fd;
         if (tmp_fd == listen_fd) {//此分支说明此时有连接到来,所以需要处理连接
-            //std::cout<<"The epoll cope with server listen_fd ok!\n";
             LOGOK_F("The epoll cope with server listen_fd ok!");
             int ret = handleConnection(server);//需要注意的是handleConnnection肯定不能是阻塞的
             if (ret < 0) {
@@ -169,17 +169,19 @@ std::vector <std::shared_ptr<Httpdata>> Epoll::epoll(ServerSocket &server, const
                 }
                 continue;
             }
-            auto it = httpmaps_.find(tmp_fd);
+            auto it = httpmaps_.find(tmp_fd);//检查要进行读写的这个client是否处于建立的连接中
             if (it != httpmaps_.end()) {
-                if (events_[i].events & EPOLLIN || events_[i].events & EPOLLPRI) {
+                if (events_[i].events & EPOLLIN || events_[i].events & EPOLLPRI) {//有新的请求或者是带外数据的,在这里并没有检查可写事件
+                    //也就是说sent是没有用的
                     result.push_back(it->second);//加入到返回的结果中
-                    it->second->closeTimer();//停止计时
-                    httpmaps_.erase(it);//为什么要从map中移除呢?
+                    it->second->closeTimer();
+                    httpmaps_.erase(it);//这里体现的逻辑是，处理好了就关闭,每次请求资源都要建立连接
+                    //但此时还并没有完全关闭,只是移除了相应的数据部分,比如说定时器和map,还没有关闭client连接
                     LOGDEBUG_C("The map'size is %d,the result's size is %d\n",httpmaps_.size(),result.size());
                 }
             } else {
                 LOGERROR_C("can't find the client fd in map");
-                ::close(tmp_fd);
+                ::close(tmp_fd); //如果没有就关闭,说明这个client socket当作无效的
                 continue;
             }
         }

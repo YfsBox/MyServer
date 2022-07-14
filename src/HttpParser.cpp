@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <string>
 
-
+//用来过滤字符串中多余的部分
 static std::string& trim(std::string &str){
     if(str.empty()){
         return str;
@@ -23,10 +23,10 @@ static std::string& trim(std::string &str){
 HttpParser::LINE_STATUS
 HttpParser::parseLine(char *buffer,int &start_i,int &end_i) {
     char tmpc;
-    for(;start_i < end_i;start_i ++){
+    for(;start_i < end_i;start_i ++){//主要在于rc的检查
         tmpc = buffer[start_i];
         if(tmpc == RC){
-            if(start_i + 1 == end_i){
+            if(start_i + 1 == end_i){//两种不同的情况在于末尾有没有/n
                 return LINE_MORE;
             }
             if(buffer[start_i + 1] == NC) {
@@ -102,7 +102,6 @@ HttpParser::parseRequestLine(char *line,PARSE_STATUS &parse_status,HttpRequest *
     }else {
         return REQUEST_ERROR;
     }
-
     parse_status = PARSE_HEADERS;
     //LOGDEBUG_C("Version :%s\n Method :%s\n Url :%s\n",version,method,url);
     return REQUEST_NO;
@@ -135,7 +134,6 @@ HttpParser::parseHeaders(const char *line,PARSE_STATUS &parse_status,HttpRequest
     }else{
         std::cout<<"not have this key in map\n";
     }
-
     //trim是什么东西???
     //second和first分别是什么??
     return REQUEST_NO;
@@ -148,6 +146,7 @@ HttpParser::parseBody(const char *buffer,HttpRequest *request) {
 }
 
 //正常情况下,将会在body解析完或者headers解析完,返回OK
+//这是一个状态机,逐行读取,根据每一行的状态，进行特定的分析,比如说header,requestline，body等
 HttpParser::REQUEST_CODE
 HttpParser::parseMessage(char *buffer,int &start_i,
                             int &end_i,int begin_offset,
@@ -170,7 +169,7 @@ HttpParser::parseMessage(char *buffer,int &start_i,
                 if(ret == REQUEST_ERROR) {
                     return REQUEST_ERROR;
                 } else if(ret == REQUEST_GET) {
-                    return REQUEST_GET;
+                    return REQUEST_GET;//已经读取到一个完整无误的报文了
                 }
                 break;
             }   
@@ -179,14 +178,14 @@ HttpParser::parseMessage(char *buffer,int &start_i,
                 if(ret == REQUEST_ERROR) {
                     return REQUEST_ERROR;
                 }
-                return REQUEST_GET;
+                return REQUEST_GET;//
                 break;
             }
             default:
                 return REQUEST_ERROR;
         }
     }
-    if(linecode == LINE_MORE) {//
+    if(linecode == LINE_MORE) {//此时说明接受的缓冲区还不足以构造出一个完成的报文
         return REQUEST_NO;
     }else{
         return REQUEST_ERROR;

@@ -3,58 +3,58 @@
 #include "../include/Epoll.h"
 #include "../include/Timer.h"
 #include "../include/HttpParser.h"
+#include "../include/Pages.h"
 
 #include <string>
 #include <sys/stat.h>
+#include <sys/fcntl.h>
+#include <sys/mman.h>
 
 #define BUFFER_SIZE 2048
 
 
 Server::Server() :
-        ip_("127.0.0.1"), port_(8080) {
+        ip_("0.0.0.0"), port_(8080) {
 }
 
 Server::~Server() {
 
 }
 
-int Server::init(const std::string ip, const int port) {
+int Server::init(const std::string ip, const int port,const int max_event_size) {
     ip_ = ip;
     port_ = port;
 
     std::shared_ptr <ServerSocket> tmpSocket(new ServerSocket(ip, port));
     serverSock = tmpSocket;
-
     serverSock->bind();
     serverSock->listen();
+
+    std::shared_ptr <Epoll> tmpEpoller(new Epoll((*serverSock),max_event_size));
+    epoller_ = tmpEpoller;
 
     return 0;
 }
 
 void Server::run(const int max_thread_size, const int max_request_size, const int max_event_size) {
     ThreadPool pool(max_thread_size, max_request_size);
-    Epoll poller((*serverSock), max_event_size);
 
-    poller.addfd(serverSock->getListenfd(), (EPOLLIN | EPOLLET | EPOLLONESHOT), NULL);
+    epoller_->addfd(serverSock->getListenfd(), (EPOLLIN | EPOLLET | EPOLLONESHOT), NULL);
 
     while (true) {
-        std::vector <std::shared_ptr<Httpdata>> event_datas = poller.epoll(*serverSock, -1);//轮询到来的事件，并初始化好data结构体
+        std::vector <std::shared_ptr<Httpdata>> event_datas = epoller_->epoll(*serverSock, -1);//轮询到来的事件，并初始化好data结构体
 
-        /*if(event_cnt < 0){
-            //std::cout<<"The Server poller.epoll error\n";
-            LOGERROR_F("The Server poller.epoll error");
-            continue;
-        }
+        //对于就绪事件对应的
         for (auto &each: event_datas) { //其中这段代码的作用在于对于就绪的事件来说，将对应的request进行解析
             //并且构造reponse
             //之所以要加上一个bind(this)是因为这个函数本身就是server内部的,有一个隐含的this指针.
             pool.pushRequest(each, std::bind(&Server::doRequest, this, std::placeholders::_1));//这个函数的参数究竟是什么呢？
         }
-         */
 
         //接下来处理,分发给线程池.
         //std::cout<<"hand to pool......\n";
         LOGOK_F("put the epoll events to pool");
+        Epoll::timermanager.HandleExpired();//处理过期节点
     }
 
 }
@@ -122,9 +122,20 @@ void Server::doRequest(std::shared_ptr<void> args) {
                        data->reponse_->headers_["Connection"].c_str());*/
             getMine(data);
             HttpReponse::FILE_STATUS file_status = getFile(data);
-
+            LOGDEBUG_C("sent the reponse");
+            sendResponse(data,file_status);
             //剩下的部分就是发送相应报文了
+            if (data->reponse_->isalive_ == true) {
+                //Epoll::modfd(,data->client_->getfd(), Epoll::DEFAULT_EVENTS,data);
+                //Epoll::timerManager.addTimer(, TimerManager::DEFAULT_TIME_OUT);
+                epoller_->modfd(client_fd,Epoll::DEFALUT_EVENT,data);
+                epoller_->timermanager.addTimerNode(data,TimerManager::DEFAULT_TIMEOUT);
+            }
+            LOGDEBUG_C("sent end")
+        } else {
+            std::cout<<"It is a bad request\n";
         }
+
 
     }
 
@@ -190,6 +201,57 @@ HttpReponse::FILE_STATUS Server::getFile(std::shared_ptr <Httpdata> data) {
 
     return HttpReponse::FILE_OK;
 }
+
+void Server::sendResponse(std::shared_ptr <Httpdata> data,HttpReponse::FILE_STATUS filestate) {
+    char buffer[BUFFER_SIZE];
+    bzero(buffer,'\0');
+    const char *internal_error = "Internal error";
+    struct stat file_stat;
+    data->reponse_->writeMessage(buffer);
+
+    if(filestate == HttpReponse::FILE_NOTFOUND) {
+        if(data->reponse_->filepath_ == "/") {
+            sprintf(buffer,"%sContent-length: %ld\r\n\r\n",buffer,strlen(INDEX_PAGE));
+            sprintf(buffer,"%s%s",buffer,INDEX_PAGE);
+        }else {
+            sprintf(buffer,"%sContent-length: %ld\r\n\r\n",buffer, strlen(NOT_FOUND_PAGE));
+            sprintf(buffer,"%s%s",buffer,NOT_FOUND_PAGE);
+        }
+        ::send(data->client_->getfd(),buffer, strlen(buffer),0);
+        return;
+    }
+    if(filestate == HttpReponse::FILE_FORBIDDEN) {
+        sprintf(buffer,"%sContent-length: %ld\r\n\r\n",buffer, strlen(FORBIDDEN_PAGE));
+        sprintf(buffer,"%s%s",buffer,FORBIDDEN_PAGE);
+        ::send(data->client_->getfd(),buffer, strlen(buffer),0);
+        return;
+    }
+    if(stat(data->reponse_->filepath_.c_str(),&file_stat) < 0) {
+        sprintf(buffer,"%sContent-length: %ld\r\n\r\n",buffer, strlen(internal_error));
+        sprintf(buffer,"%s%s",buffer,internal_error);
+        ::send(data->client_->getfd(),buffer, strlen(buffer),0);
+        return;
+    }
+
+    int filefd = ::open(data->reponse_->filepath_.c_str(),O_RDONLY);
+    if (filefd < 0) {
+        sprintf(buffer,"%sContent-length: %ld\r\n\r\n",buffer, strlen(internal_error));
+        sprintf(buffer,"%s%s",buffer,internal_error);
+        ::send(data->client_->getfd(),buffer, strlen(buffer),0);
+        ::close(filefd);
+        return;
+    }
+
+    sprintf(buffer,"%sContent-length: %ld\r\n\r\n",buffer,file_stat.st_size);
+    ::send(data->client_->getfd(),buffer, strlen(buffer),0);
+    //传输一个个文件,采用了mmap的方式
+    void *mapbuf = mmap(NULL, file_stat.st_size, PROT_READ, MAP_PRIVATE, filefd, 0);
+    ::send(data->client_->getfd(), mapbuf, file_stat.st_size, 0);
+    munmap(mapbuf, file_stat.st_size);
+    ::close(filefd);
+    return;
+}
+
 
 //GET /tutorials/other/top-20-mysql-best-practices/ HTTP/1.1        版本号解析完了，GET方法在这里是默认的
 //Host: code.tutsplus.com       没什么好弄的

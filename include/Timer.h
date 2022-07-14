@@ -38,12 +38,12 @@ struct TimerCmp {
         return a->getExpired() > b->getExpired();
     }
 };
-
+//是对于一个优先队列的抽象
 class TimerManager {
 public:
 
     void HandleExpired();
-    int addTimerNode(std::shared_ptr<Httpdata> sdata,const size_t timeout);
+    int addTimerNode(std::shared_ptr<Httpdata> sdata,const size_t timeout);//将一个client对应的节点追加到优先级队列上
     const static size_t DEFAULT_TIMEOUT;
     int getSize() const { return timerQueue_.size(); }
 private:

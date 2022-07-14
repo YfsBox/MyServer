@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include "Epoll.h"
 #include "Httpdata.h"
 #include "Socket.h"
 #include "Log.h"
@@ -20,17 +21,19 @@ public:
     Server();
     ~Server();
 
-    int init(const std::string ip,const int port); //init处理了关于socket的部分
+    int init(const std::string ip,const int port,const int max_event_size); //init处理了关于socket的部分
     void run(const int max_thread_size,const int max_request_size,const int max_event_size);
     void doRequest(std::shared_ptr<void> args);
     void getMine(std::shared_ptr<Httpdata> data);//其中主要根据uri请求文件的后缀来判断mine类型
     HttpReponse::FILE_STATUS getFile(std::shared_ptr<Httpdata> data);
+    void sendResponse(std::shared_ptr<Httpdata> data,HttpReponse::FILE_STATUS filestate);
 
     //其中get有关的函数用来解析request生成需要用在reponse的东西比如mine，file等，这种功能被汇总在doRequest,并且还会有send
 private:
     std::string ip_;
     int port_; 
     std::shared_ptr<ServerSocket> serverSock;
+    std::shared_ptr<Epoll> epoller_;
 
 };
 #endif //MYSERVER_SERVER_H

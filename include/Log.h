@@ -9,7 +9,10 @@
 #include "Mutex.h"
 #include "Condition.h"
 
-
+//这里的log队列实现还是很简单的
+//关于文件的部分
+//一个线程,这个线程的信号量，请求队列。
+//还有对用户使用的接口
 
 enum LOGLEVEL {
     LOG_LEVEL_NONE,
@@ -51,7 +54,7 @@ private:
     Mutex logMutex_;
     std::shared_ptr<Condition> cond_;
 
-    std::string logBuf_;
+    //std::string logBuf_;
 //level,target
 
     // log file

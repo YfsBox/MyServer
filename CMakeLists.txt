@@ -14,7 +14,7 @@ set(CXX_FLAGS
         -std=c++11
         -lpthread
         -Wno-unused-parameter
-
+        -Wno-error=format-overflow
         )
 
 link_libraries(pthread)
