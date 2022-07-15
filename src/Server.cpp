@@ -42,6 +42,7 @@ void Server::run(const int max_thread_size, const int max_request_size, const in
     epoller_->addfd(serverSock->getListenfd(), (EPOLLIN | EPOLLET | EPOLLONESHOT), NULL);
 
     while (true) {
+
         std::vector <std::shared_ptr<Httpdata>> event_datas = epoller_->epoll(*serverSock, -1);//轮询到来的事件，并初始化好data结构体
 
         //对于就绪事件对应的
@@ -117,12 +118,9 @@ void Server::doRequest(std::shared_ptr<void> args) {
                     //data->reponse_->headers_["Connection"] = "close";
                 }
             }
-            /*LOGDEBUG_C("Alive :%d\nKeep-alive :%s\nConnection :%s\n", data->reponse_->isalive_,
-                       data->reponse_->headers_["Keep-Alive"].c_str(),
-                       data->reponse_->headers_["Connection"].c_str());*/
             getMine(data);
             HttpReponse::FILE_STATUS file_status = getFile(data);
-            LOGDEBUG_C("sent the reponse");
+            //LOGDEBUG_C("sent the reponse");
             sendResponse(data,file_status);
             //剩下的部分就是发送相应报文了
             if (data->reponse_->isalive_ == true) {
@@ -131,12 +129,10 @@ void Server::doRequest(std::shared_ptr<void> args) {
                 epoller_->modfd(client_fd,Epoll::DEFALUT_EVENT,data);
                 epoller_->timermanager.addTimerNode(data,TimerManager::DEFAULT_TIMEOUT);
             }
-            LOGDEBUG_C("sent end")
+            //LOGDEBUG_C("sent end");
         } else {
             std::cout<<"It is a bad request\n";
         }
-
-
     }
 
 }
@@ -217,6 +213,7 @@ void Server::sendResponse(std::shared_ptr <Httpdata> data,HttpReponse::FILE_STAT
             sprintf(buffer,"%sContent-length: %ld\r\n\r\n",buffer, strlen(NOT_FOUND_PAGE));
             sprintf(buffer,"%s%s",buffer,NOT_FOUND_PAGE);
         }
+        LOGDEBUG_C("NOTFOUND send the %s",buffer);
         ::send(data->client_->getfd(),buffer, strlen(buffer),0);
         return;
     }
@@ -224,12 +221,14 @@ void Server::sendResponse(std::shared_ptr <Httpdata> data,HttpReponse::FILE_STAT
         sprintf(buffer,"%sContent-length: %ld\r\n\r\n",buffer, strlen(FORBIDDEN_PAGE));
         sprintf(buffer,"%s%s",buffer,FORBIDDEN_PAGE);
         ::send(data->client_->getfd(),buffer, strlen(buffer),0);
+        LOGDEBUG_C("FORBIDDEN send the %s",buffer);
         return;
     }
     if(stat(data->reponse_->filepath_.c_str(),&file_stat) < 0) {
         sprintf(buffer,"%sContent-length: %ld\r\n\r\n",buffer, strlen(internal_error));
         sprintf(buffer,"%s%s",buffer,internal_error);
         ::send(data->client_->getfd(),buffer, strlen(buffer),0);
+        LOGDEBUG_C("internal error send the %s",buffer);
         return;
     }
 
@@ -239,6 +238,7 @@ void Server::sendResponse(std::shared_ptr <Httpdata> data,HttpReponse::FILE_STAT
         sprintf(buffer,"%s%s",buffer,internal_error);
         ::send(data->client_->getfd(),buffer, strlen(buffer),0);
         ::close(filefd);
+        LOGDEBUG_C("the inernal error send the %s",buffer);
         return;
     }
 
@@ -246,6 +246,7 @@ void Server::sendResponse(std::shared_ptr <Httpdata> data,HttpReponse::FILE_STAT
     ::send(data->client_->getfd(),buffer, strlen(buffer),0);
     //传输一个个文件,采用了mmap的方式
     void *mapbuf = mmap(NULL, file_stat.st_size, PROT_READ, MAP_PRIVATE, filefd, 0);
+    LOGDEBUG_C("The ok send the %s",buffer);
     ::send(data->client_->getfd(), mapbuf, file_stat.st_size, 0);
     munmap(mapbuf, file_stat.st_size);
     ::close(filefd);

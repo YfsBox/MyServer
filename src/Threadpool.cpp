@@ -5,11 +5,13 @@
 #include <iostream>
 #include <memory>
 #include <pthread.h>
+#include <sys/prctl.h>
 
 
 ThreadPool::ThreadPool(const int max_thread_size, const int max_request_size):
     max_thread_size_(max_thread_size),max_request_size_(max_request_size),
-    running_cnt_(0),cond_(mutex_){
+    running_cnt_(0){
+    cond_.reset(new Condition(mutex_));
     if(max_thread_size_ <= 0 || max_thread_size_ > MAX_THREAD_SIZE){
         max_thread_size_ = MAX_THREAD_SIZE;
     }
@@ -29,9 +31,9 @@ ThreadPool::ThreadPool(const int max_thread_size, const int max_request_size):
 }
 
 ThreadPool::~ThreadPool() {
-    {
-        MutexGuard(this->mutex_);
-        cond_.signalAll();
+    if(true){
+        MutexGuard guard(this->mutex_);
+        cond_->signalAll();
     }
     for(int i = 0;i < max_thread_size_;i++){
         pthread_join(threads_[i],NULL);
@@ -40,7 +42,7 @@ ThreadPool::~ThreadPool() {
 }
 
 int ThreadPool::pushRequest(std::shared_ptr<void> args, std::function<void(std::shared_ptr < void > )> func) {
-    MutexGuard(this->mutex_);
+    MutexGuard guard(this->mutex_);
     if(request_.size() >= MAX_REQUEST_SIZE) {
         //std::cout<<"The Request list is full\n";
         LOGERROR_F("The Request list is full");
@@ -50,7 +52,7 @@ int ThreadPool::pushRequest(std::shared_ptr<void> args, std::function<void(std::
     task.args = args;
     task.process = func;
     request_.push_back(task);
-    cond_.signal();
+    cond_->signal();
 
     return 0;
 }
@@ -59,9 +61,9 @@ void ThreadPool::runThread() {
     while (true){
         Task task;
         {
-            MutexGuard(this->mutex_);
+            MutexGuard guard(mutex_);
             while (request_.empty()) {
-                cond_.wait();
+                cond_->wait();
             }
             task = request_.front();
             request_.pop_front();
@@ -77,6 +79,12 @@ void* ThreadPool::worker(void *args) {
         LOGERROR_F("The worker error");
         return NULL;
     }
+    static int thread_id = 0;
+    char thread_name[30];
+    sprintf(thread_name,"thread_%d",thread_id);
+    prctl(PR_SET_NAME,thread_name);
+    thread_id ++;
+
     pool->runThread();
     return NULL;
 }

@@ -7,14 +7,13 @@ set(CMAKE_CXX_COMPILER "g++")
 set(CMAKE_BUILD_TYPE "Debug")
 
 set(CXX_FLAGS
-        -O0
-        -g
-        -ggdb
+        -O3
+        -g3
+        -ggdb3
         -Wall
         -std=c++11
         -lpthread
         -Wno-unused-parameter
-        -Wno-error=format-overflow
         )
 
 link_libraries(pthread)

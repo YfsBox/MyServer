@@ -39,6 +39,6 @@ private:
     int max_request_size_;
 
     Mutex mutex_;
-    Condition cond_;
+    std::shared_ptr<Condition> cond_;
 };
 #endif //MYSERVER_THREADPOOL_H

@@ -4,8 +4,15 @@
 #ifndef MYSERVER_MUTEX_H
 #define MYSERVER_MUTEX_H
 
+#include <iostream>
 #include <pthread.h>
- class Mutex{
+#include <thread>
+
+
+#define DEBUG_INFO(format, ...) printf("File:%s, Line:%d, Function:%s, %s\n", \
+    __FILE__, __LINE__ , __FUNCTION__, ##__VA_ARGS__);
+
+class Mutex{
  public:
     Mutex() {
         pthread_mutex_init(&lock_,NULL);
@@ -34,9 +41,13 @@
 class MutexGuard {
 public:
     explicit MutexGuard(Mutex &lock):lock_(lock) {
+       /* std::cout<<"The lock thread id is "<<std::this_thread::get_id()<<'\n';
+        DEBUG_INFO("%s","LOCK");*/
         lock_.lock();
     }
     ~MutexGuard() {
+        /*std::cout<<"The unlock thread id is "<<std::this_thread::get_id()<<'\n';
+        DEBUG_INFO("%s","UNLOCK");*/
         lock_.unlock();
     }
 

@@ -24,8 +24,12 @@ void* Log::logThreadFunc(void *args) {
             logger->cond_->wait();
         }
         //std::cout<<"The log thread is waking......\n";
-        std::string request = logger->queue_.front();
-        fwrite((void*)request.c_str(), request.length(), 1,logger->logfile_ptr_);
+        //std::cout<<"The front is "<<logger->queue_.front()<<'\n';
+        std::string request;
+        std::cout << "the size is %d" << logger->queue_.size() << '\n';
+        request = logger->queue_.front();
+
+        fwrite(request.c_str(), request.length(), 1,logger->logfile_ptr_);
         fflush(logger->logfile_ptr_);
         logger->queue_.pop_front();
     }
